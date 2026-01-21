@@ -37,27 +37,38 @@ function setupChatSocket(io) {
             });
         });
 
-        socket.on('send_message', async ({ channelId, content }) => {
-            try {
-                if (!content || content.trim().length === 0) {
-                    socket.emit('error', { message: 'Message content cannot be empty' });
-                    return;
-                }
-
-                const result = await pool.query(
-                    'INSERT INTO messages(channel_id, user_id, content) VALUES($1, $2, $3) RETURNING *',
-                    [channelId, socket.userId, content]
-                );
-
-                const message = {
-                    ...result.rows[0],
-                    username: socket.username
-                };
-
-                io.to(`channel_${channelId}`).emit('new_message', message);
-            } catch (error) {
-                socket.emit('error', { message: 'Failed to send message' });
+        socket.on('send_message', ({ channelId, content }) => {
+            if(!content || typeof content!== 'string' || content.trim().length===0){
+                return socket.emit('error',{message:'Message content cannot be empty'});
             }
+            const optimisticMessage={
+                id:Date.now(),
+                channel_id:channelId,
+                user_id:socket.userId,
+                username:socket.username,
+                content:content,
+                created_at:new Date().toISOString(),
+                status:'sending'
+            };
+
+            io.to(`channel_${channelId}`).emit('new_message', optimisticMessage);
+            pool.query(
+                'INSERT INTO messages(channel_id,user_id,content) VALUES ($1,$2,$3) RETURNING *',
+                [channelId,socket.userId,content]
+            ).then((result)=>{
+                socket.emit('message_confirmed',{
+                    tempId:optimisticMessage.id,
+                    dbId:result.rows[0].id,
+                    message:"Message confirmed successfully"
+                });
+                console.log(`Message persisted with ID: ${result.rows[0].id}`);
+            }).catch((error)=>{
+                console.error("CRITICAL: Message persistence failed: ",error.message);
+                socket.emit('message_error',{
+                    tempId:optimisticMessage.id,
+                    error:"Message failed to save"
+                });
+            });
         });
 
         socket.on('typing_start', ({ channelId }) => {
