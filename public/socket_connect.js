@@ -11,8 +11,8 @@ function connect(){
         return;
     }
     currentChannel=channelId;
-    socket=io("http://localhost:3001",{
-        auth:{token}
+    socket=io({
+        auth:{token:localStorage.getItem('token') }
     });
     socket.on('connect',()=>{
         document.getElementById('status').textContent='Connected';
@@ -54,20 +54,11 @@ function connect(){
 function sendMessage(){
     const input=document.getElementById('messageInput');
     const content=input.value.trim();
-    
-    console.log('1. sendMessage called'); // ADD THIS
-    console.log('2. Content:', content); // ADD THIS
-    console.log('3. Current channel:', currentChannel); // ADD THIS
-    console.log('4. Socket exists?', socket); // ADD THIS
-    console.log('5. Socket connected?', socket ? socket.connected : 'no socket');
 
-    if(!content){ console.log('6. Content empty, returning'); return; }
-    console.log('7. About to emit send_message');
+    if(!content){ return; }
     socket.emit('send_message',{
         channelId: currentChannel, content
     });
-    console.log('8. Emitted send_message');
-
     input.value='';
 }
 function addMessage(username,content,time){
